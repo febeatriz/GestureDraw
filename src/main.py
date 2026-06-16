@@ -4,6 +4,7 @@ from hand_tracking.detector import HandDetector
 from hand_tracking.finger_utils import get_raised_fingers
 from gestures.gesture_manager import GestureManager
 from drawing.canvas import Canvas
+from drawing.color_selector import draw_color_selector, get_pinched_color
 from utils.constants import WIDTH, HEIGHT, COLOR_BRUSH, COLOR_ERASER, BRUSH_THICKNESS, ERASER_THICKNESS, COLOR_CURSOR
 
 def main():
@@ -14,6 +15,7 @@ def main():
     detector = HandDetector()
     canvas = Canvas()
     xp, yp = 0, 0  # Coordenadas anteriores
+    current_brush_color = COLOR_BRUSH
 
     while True:
         success, frame = cap.read()
@@ -28,19 +30,28 @@ def main():
         if landmarks:
             # Pegar ponta do indicador (ID 8) e mindinho (ID 20)
             x1, y1 = landmarks[8][1:]
+            x_thumb, y_thumb = landmarks[4][1:]
             x5, y5 = landmarks[20][1:]
+
+            selected_color = get_pinched_color((x_thumb, y_thumb), (x1, y1))
+            if selected_color:
+                current_brush_color = selected_color
+                xp, yp = 0, 0
             
             # 2. Identificar Gestos
             fingers = get_raised_fingers(landmarks)
             mode = GestureManager.get_mode(fingers)
             
             # 3. Executar Ações
-            if mode == "DRAWING":
-                cv2.circle(frame, (x1, y1), 15, COLOR_BRUSH, cv2.FILLED)
+            if selected_color:
+                cv2.circle(frame, (x1, y1), 18, current_brush_color, cv2.FILLED)
+
+            elif mode == "DRAWING":
+                cv2.circle(frame, (x1, y1), 15, current_brush_color, cv2.FILLED)
                 if xp == 0 and yp == 0:
                     xp, yp = x1, y1
                 
-                canvas.draw_line((xp, yp), (x1, y1), COLOR_BRUSH, BRUSH_THICKNESS)
+                canvas.draw_line((xp, yp), (x1, y1), current_brush_color, BRUSH_THICKNESS)
                 xp, yp = x1, y1
 
             elif mode == "ERASING":
@@ -62,6 +73,7 @@ def main():
         # Onde houver desenho no canvas, "limpa" o frame da webcam e adiciona a cor
         frame = cv2.bitwise_and(frame, img_inv)
         frame = cv2.bitwise_or(frame, canvas.get_canvas())
+        frame = draw_color_selector(frame, current_brush_color)
 
         cv2.imshow("AirDraw - Painel Principal", frame)
         
